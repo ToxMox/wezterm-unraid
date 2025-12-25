@@ -1,0 +1,19 @@
+# Certificate bundles - NEVER commit these
+*.zip
+cert-extract/
+
+# Old package versions
+archive/wezterm-*.txz
+!archive/wezterm-2025.12.24o.txz
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json

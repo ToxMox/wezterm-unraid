@@ -1,0 +1,151 @@
+#!/bin/bash
+
+CONFIG_FILE="/boot/config/plugins/wezterm/wezterm.cfg"
+PID_FILE="/var/run/wezterm/wezterm-mux-server.pid"
+RUNTIME_DIR="/var/run/wezterm"
+
+# Source configuration
+if [ -f "$CONFIG_FILE" ]; then
+  source "$CONFIG_FILE"
+fi
+
+start() {
+  if [ -f "$PID_FILE" ]; then
+    PID_VAL=$(cat "$PID_FILE")
+    if kill -0 "$PID_VAL" 2>/dev/null; then
+      echo "WezTerm server is already running (PID: $PID_VAL)"
+      return 1
+    fi
+  fi
+
+  mkdir -p "$RUNTIME_DIR"
+
+  # Check if wezterm-mux-server is installed
+  if ! command -v wezterm-mux-server >/dev/null 2>&1; then
+    echo "wezterm-mux-server not found. Please install WezTerm first."
+    echo "Run: /usr/local/emhttp/plugins/wezterm/scripts/install.sh"
+    return 1
+  fi
+
+  # Check if certificates exist
+  if [ ! -f "/boot/config/plugins/wezterm/certs/server.crt" ]; then
+    echo "Server certificates not found. Please initialize CA first."
+    return 1
+  fi
+
+  # Check if config exists
+  if [ ! -f "/boot/config/plugins/wezterm/wezterm.lua" ]; then
+    echo "WezTerm config not found. Generating..."
+    /usr/local/emhttp/plugins/wezterm/scripts/install.sh update-config
+  fi
+
+  echo "Starting WezTerm mux-server..."
+  LD_LIBRARY_PATH=/usr/local/lib/wezterm WEZTERM_LOG="${LOG_LEVEL:-info}" wezterm-mux-server \
+    --daemonize \
+    --config-file /boot/config/plugins/wezterm/wezterm.lua
+
+  sleep 2
+  SERVER_PID=$(pgrep -f "wezterm-mux-server.*config-file")
+  if [ -n "$SERVER_PID" ]; then
+    echo "$SERVER_PID" > "$PID_FILE"
+    echo "WezTerm server started successfully (PID: $SERVER_PID)"
+    return 0
+  else
+    echo "Failed to start WezTerm server"
+    return 1
+  fi
+}
+
+stop() {
+  if [ ! -f "$PID_FILE" ]; then
+    echo "WezTerm server is not running"
+    return 0
+  fi
+
+  PID=$(cat "$PID_FILE")
+  if ! kill -0 "$PID" 2>/dev/null; then
+    echo "WezTerm server is not running (stale PID file)"
+    rm -f "$PID_FILE"
+    return 0
+  fi
+
+  echo "Stopping WezTerm server (PID: $PID)..."
+  kill "$PID"
+
+  # Wait for graceful shutdown
+  for i in $(seq 1 10); do
+    if ! kill -0 "$PID" 2>/dev/null; then
+      rm -f "$PID_FILE"
+      echo "WezTerm server stopped"
+      return 0
+    fi
+    sleep 1
+  done
+
+  # Force kill if still running
+  if kill -0 "$PID" 2>/dev/null; then
+    echo "Forcing shutdown..."
+    kill -9 "$PID"
+    rm -f "$PID_FILE"
+  fi
+
+  echo "WezTerm server stopped"
+  return 0
+}
+
+status() {
+  if [ -f "$PID_FILE" ]; then
+    PID_VAL=$(cat "$PID_FILE")
+    if kill -0 "$PID_VAL" 2>/dev/null; then
+      echo "WezTerm server is running (PID: $PID_VAL)"
+      return 0
+    fi
+  fi
+  echo "WezTerm server is not running"
+  return 1
+}
+
+enable() {
+  if ! grep -q "rc.wezterm start" /boot/config/go 2>/dev/null; then
+    echo "# Start WezTerm server" >> /boot/config/go
+    echo "/etc/rc.d/rc.wezterm start" >> /boot/config/go
+    echo "WezTerm added to boot startup"
+  else
+    echo "WezTerm already in boot startup"
+  fi
+}
+
+disable() {
+  if [ -f /boot/config/go ]; then
+    sed -i '/rc.wezterm/d' /boot/config/go
+    sed -i '/# Start WezTerm server/d' /boot/config/go
+    echo "WezTerm removed from boot startup"
+  fi
+}
+
+case "$1" in
+  start)
+    start
+    ;;
+  stop)
+    stop
+    ;;
+  restart)
+    stop
+    sleep 2
+    start
+    ;;
+  status)
+    status
+    ;;
+  enable)
+    enable
+    ;;
+  disable)
+    disable
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status|enable|disable}"
+    exit 1
+    ;;
+esac

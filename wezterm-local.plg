@@ -1,0 +1,119 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "wezterm">
+  <!ENTITY author    "ToxMox">
+  <!ENTITY version   "2024.12.24">
+  <!ENTITY launch    "Settings/WezTermServer">
+  <!ENTITY md5       "8d960b1a541cf887ed8de5cc0f2278b2">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" min="7.0.0" icon="terminal">
+
+<CHANGES>
+###2024.12.24
+- Initial release
+- WezTerm mux-server support with TLS authentication
+- Certificate management (CA, server, client certs)
+- Web-based configuration UI
+- Service management (start/stop/restart)
+- Client certificate bundle download
+</CHANGES>
+
+<!--
+The 'source' package - LOCAL FILE (must be in same directory as this .plg)
+-->
+<FILE Name="/boot/config/plugins/&name;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<LOCAL>/boot/config/plugins/wezterm/wezterm-2024.12.24.txz</LOCAL>
+<MD5>&md5;</MD5>
+</FILE>
+
+<!--
+Create persistent directories
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+mkdir -p /boot/config/plugins/wezterm/certs/clients
+mkdir -p /var/run/wezterm
+chmod +x /usr/local/emhttp/plugins/wezterm/scripts/*
+ln -sf /usr/local/emhttp/plugins/wezterm/scripts/rc.wezterm /etc/rc.d/rc.wezterm
+echo "WezTerm plugin directories created"
+</INLINE>
+</FILE>
+
+<!--
+Create default configuration if not exists
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+CFG="/boot/config/plugins/wezterm/wezterm.cfg"
+if [ ! -f "$CFG" ]; then
+  cat > "$CFG" &lt;&lt;'DEFCFG'
+# WezTerm Server Configuration
+SERVICE="disable"
+LISTEN_ADDRESS="0.0.0.0"
+LISTEN_PORT="8080"
+LOG_LEVEL="info"
+VERSION="latest"
+DEFCFG
+  echo "Default configuration created"
+fi
+</INLINE>
+</FILE>
+
+<!--
+Post-install: start service if enabled
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+source /boot/config/plugins/wezterm/wezterm.cfg 2>/dev/null
+if [ "$SERVICE" = "enable" ]; then
+  /etc/rc.d/rc.wezterm start 2>/dev/null || true
+fi
+echo ""
+echo "-----------------------------------------------------------"
+echo " WezTerm Server plugin installed successfully!"
+echo " Version: &version;"
+echo " Access Settings -> WezTerm Server to configure"
+echo "-----------------------------------------------------------"
+echo ""
+</INLINE>
+</FILE>
+
+<!--
+The 'remove' script
+-->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+# Stop service
+/etc/rc.d/rc.wezterm stop 2>/dev/null || true
+
+# Remove from boot
+sed -i '/rc.wezterm/d' /boot/config/go 2>/dev/null || true
+
+# Remove symlink
+rm -f /etc/rc.d/rc.wezterm
+
+# Remove binary
+rm -f /usr/local/bin/wezterm-mux-server
+
+# Remove runtime directory
+rm -rf /var/run/wezterm
+
+# Remove package
+removepkg &name;-&version; 2>/dev/null || true
+
+# Remove old packages
+rm -f /boot/config/plugins/&name;/&name;-*.txz
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " WezTerm Server plugin removed"
+echo " Configuration and certificates preserved at:"
+echo " /boot/config/plugins/wezterm"
+echo " Delete manually if no longer needed"
+echo "-----------------------------------------------------------"
+echo ""
+</INLINE>
+</FILE>
+
+</PLUGIN>

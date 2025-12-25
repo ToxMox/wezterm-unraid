@@ -1,0 +1,142 @@
+<?xml version='1.0' standalone='yes'?>
+<!DOCTYPE PLUGIN [
+  <!ENTITY name      "wezterm">
+  <!ENTITY author    "ToxMox">
+  <!ENTITY version   "2025.12.24o">
+  <!ENTITY launch    "Utilities/WezTermServer">
+  <!ENTITY github    "ToxMox/wezterm-unraid">
+  <!ENTITY pluginURL "https://raw.githubusercontent.com/&github;/main/wezterm.plg">
+  <!ENTITY md5       "ea5bbef4918f644138c411c996e0e4b0">
+]>
+
+<PLUGIN name="&name;" author="&author;" version="&version;" launch="&launch;" pluginURL="&pluginURL;" min="7.0.0" icon="terminal">
+
+<CHANGES>
+###2024.12.24
+- Initial release
+- WezTerm mux-server support with TLS authentication
+- Certificate management (CA, server, client certs)
+- Web-based configuration UI
+- Service management (start/stop/restart)
+- Client certificate bundle download
+</CHANGES>
+
+<!--
+The 'source' package containing plugin files
+-->
+<FILE Name="/boot/config/plugins/&name;/&name;-&version;.txz" Run="upgradepkg --install-new">
+<URL>https://raw.githubusercontent.com/&github;/main/archive/&name;-&version;.txz</URL>
+<MD5>&md5;</MD5>
+</FILE>
+
+<!--
+Create default configuration if not exists
+-->
+<FILE Name="/boot/config/plugins/&name;/&name;.cfg">
+<INLINE>
+# WezTerm Server Configuration
+SERVICE="disable"
+LISTEN_ADDRESS="0.0.0.0"
+LISTEN_PORT="8080"
+LOG_LEVEL="info"
+VERSION="latest"
+</INLINE>
+</FILE>
+
+<!--
+Remove old package versions before installing new one
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+rm -f /boot/config/plugins/wezterm/wezterm-*.txz 2>/dev/null || true
+</INLINE>
+</FILE>
+
+<!--
+Create persistent directories and setup
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+mkdir -p /boot/config/plugins/wezterm/certs/clients
+mkdir -p /var/run/wezterm
+chmod +x /usr/local/emhttp/plugins/wezterm/scripts/*
+ln -sf /usr/local/emhttp/plugins/wezterm/scripts/rc.wezterm /etc/rc.d/rc.wezterm
+echo "WezTerm plugin directories created"
+</INLINE>
+</FILE>
+
+<!--
+Install WezTerm binary
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+echo "Installing WezTerm mux-server..."
+/usr/local/emhttp/plugins/wezterm/scripts/install.sh
+</INLINE>
+</FILE>
+
+<!--
+Post-install: start service if enabled
+-->
+<FILE Run="/bin/bash">
+<INLINE>
+source /boot/config/plugins/wezterm/wezterm.cfg 2>/dev/null
+if [ "$SERVICE" = "enable" ]; then
+  /etc/rc.d/rc.wezterm start 2>/dev/null || true
+fi
+echo ""
+echo "-----------------------------------------------------------"
+echo " WezTerm Server plugin installed successfully!"
+echo " Version: &version;"
+echo " Access Utilities -> WezTerm Server to configure"
+echo "-----------------------------------------------------------"
+echo ""
+</INLINE>
+</FILE>
+
+<!--
+The 'remove' script
+-->
+<FILE Run="/bin/bash" Method="remove">
+<INLINE>
+# Stop service
+/etc/rc.d/rc.wezterm stop 2>/dev/null || true
+
+# Remove from boot
+sed -i '/rc.wezterm/d' /boot/config/go 2>/dev/null || true
+
+# Remove symlink
+rm -f /etc/rc.d/rc.wezterm
+
+# Remove binaries and bundled libraries
+rm -f /usr/local/bin/wezterm-mux-server
+rm -f /usr/local/bin/wezterm
+rm -rf /usr/local/lib/wezterm
+
+# Remove runtime directory
+rm -rf /var/run/wezterm
+
+# Remove package
+removepkg &name;-&version; 2>/dev/null || true
+
+# Remove plugin web UI files
+rm -rf /usr/local/emhttp/plugins/&name;
+
+# Remove old packages from flash
+rm -f /boot/config/plugins/&name;/&name;-*.txz
+
+# Remove plugin registration symlink
+rm -f /var/log/plugins/&name;.plg
+
+echo ""
+echo "-----------------------------------------------------------"
+echo " WezTerm Server plugin removed"
+echo " Configuration and certificates preserved at:"
+echo " /boot/config/plugins/wezterm"
+echo " Delete manually if no longer needed"
+echo "-----------------------------------------------------------"
+echo ""
+</INLINE>
+</FILE>
+
+</PLUGIN>

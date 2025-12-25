@@ -1,0 +1,643 @@
+Menu="Settings"
+Icon="terminal"
+Title="WezTerm Server"
+---
+<?php
+require_once "/usr/local/emhttp/plugins/wezterm/include/helpers.php";
+$cfg = wezterm_read_config();
+$status = wezterm_get_status();
+$certs = wezterm_list_certs();
+?>
+
+<style>
+.wezterm-container {
+    max-width: 1200px;
+}
+
+.wezterm-section {
+    background: #f6f6f6;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 5px;
+}
+
+.wezterm-section h3 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #ddd;
+}
+
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 3px;
+    font-weight: bold;
+    font-size: 12px;
+    text-transform: uppercase;
+}
+
+.status-running {
+    background: #5cb85c;
+    color: white;
+}
+
+.status-stopped {
+    background: #d9534f;
+    color: white;
+}
+
+.status-info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 15px;
+    margin-top: 15px;
+}
+
+.status-info-item {
+    background: white;
+    padding: 12px;
+    border-radius: 3px;
+    border-left: 3px solid #007bff;
+}
+
+.status-info-item label {
+    display: block;
+    font-weight: bold;
+    color: #666;
+    font-size: 12px;
+    margin-bottom: 5px;
+}
+
+.status-info-item .value {
+    font-size: 16px;
+    color: #333;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    flex-wrap: wrap;
+}
+
+.form-group {
+    margin-bottom: 15px;
+}
+
+.form-group label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+
+.form-group input[type="text"],
+.form-group input[type="number"],
+.form-group select {
+    width: 100%;
+    max-width: 400px;
+    padding: 8px;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+}
+
+.form-group input[type="checkbox"] {
+    margin-right: 8px;
+}
+
+.cert-table {
+    width: 100%;
+    background: white;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+
+.cert-table th,
+.cert-table td {
+    padding: 12px;
+    text-align: left;
+    border-bottom: 1px solid #ddd;
+}
+
+.cert-table th {
+    background: #f0f0f0;
+    font-weight: bold;
+}
+
+.cert-table tr:hover {
+    background: #f9f9f9;
+}
+
+.cert-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.btn-small {
+    padding: 4px 8px;
+    font-size: 12px;
+}
+
+.alert {
+    padding: 12px 15px;
+    margin-bottom: 15px;
+    border-radius: 3px;
+}
+
+.alert-warning {
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    color: #856404;
+}
+
+.alert-info {
+    background: #d1ecf1;
+    border: 1px solid #17a2b8;
+    color: #0c5460;
+}
+
+.generate-cert-form {
+    background: white;
+    padding: 15px;
+    border-radius: 3px;
+    margin-top: 15px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+}
+
+.generate-cert-form .form-group {
+    margin-bottom: 0;
+    flex: 1;
+    min-width: 250px;
+}
+
+.spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    margin-left: 8px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+.hidden {
+    display: none;
+}
+</style>
+
+<div class="wezterm-container">
+    <!-- Status Section -->
+    <div class="wezterm-section">
+        <h3>Service Status</h3>
+
+        <div id="service-status">
+            <span class="status-badge <?php echo $status['running'] ? 'status-running' : 'status-stopped'; ?>" id="status-badge">
+                <?php echo $status['running'] ? 'Running' : 'Stopped'; ?>
+            </span>
+
+            <div class="status-info-grid">
+                <div class="status-info-item">
+                    <label>WezTerm Version</label>
+                    <div class="value" id="wezterm-version"><?php echo htmlspecialchars($status['version'] ?? 'Not installed'); ?></div>
+                </div>
+
+                <div class="status-info-item">
+                    <label>Listening Address</label>
+                    <div class="value" id="listen-address"><?php echo htmlspecialchars($cfg['LISTEN_ADDRESS'] ?? '0.0.0.0'); ?>:<?php echo htmlspecialchars($cfg['LISTEN_PORT'] ?? '8080'); ?></div>
+                </div>
+
+                <div class="status-info-item">
+                    <label>Client Certificates</label>
+                    <div class="value" id="cert-count"><?php echo count($certs); ?> issued</div>
+                </div>
+
+                <div class="status-info-item">
+                    <label>Start on Boot</label>
+                    <div class="value" id="autostart-status"><?php echo ($cfg['SERVICE'] ?? 'disable') === 'enable' ? 'Enabled' : 'Disabled'; ?></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="button-group">
+            <button type="button" class="btn" onclick="serviceControl('start')" id="btn-start">Start Service</button>
+            <button type="button" class="btn" onclick="serviceControl('stop')" id="btn-stop">Stop Service</button>
+            <button type="button" class="btn" onclick="serviceControl('restart')" id="btn-restart">Restart Service</button>
+        </div>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="wezterm-section">
+        <h3>Configuration</h3>
+
+        <form id="config-form" onsubmit="return saveConfig(event);">
+            <div class="form-group">
+                <label for="cfg-autostart">
+                    <input type="checkbox" id="cfg-autostart" name="autostart" <?php echo ($cfg['SERVICE'] ?? 'disable') === 'enable' ? 'checked' : ''; ?>>
+                    Start service automatically on boot
+                </label>
+            </div>
+
+            <div class="form-group">
+                <label for="cfg-listen-address">Listen Address</label>
+                <input type="text" id="cfg-listen-address" name="listen_address" value="<?php echo htmlspecialchars($cfg['LISTEN_ADDRESS'] ?? '0.0.0.0'); ?>" placeholder="0.0.0.0">
+                <small>Use 0.0.0.0 to listen on all interfaces, or specify a specific IP address</small>
+            </div>
+
+            <div class="form-group">
+                <label for="cfg-listen-port">Listen Port</label>
+                <input type="number" id="cfg-listen-port" name="listen_port" value="<?php echo htmlspecialchars($cfg['LISTEN_PORT'] ?? '8080'); ?>" min="1" max="65535" placeholder="8080">
+                <small>Port number for WezTerm mux server (default: 8080)</small>
+            </div>
+
+            <div class="form-group">
+                <label for="cfg-log-level">Log Level</label>
+                <select id="cfg-log-level" name="log_level">
+                    <option value="error" <?php echo ($cfg['LOG_LEVEL'] ?? 'info') === 'error' ? 'selected' : ''; ?>>Error</option>
+                    <option value="warn" <?php echo ($cfg['LOG_LEVEL'] ?? 'info') === 'warn' ? 'selected' : ''; ?>>Warning</option>
+                    <option value="info" <?php echo ($cfg['LOG_LEVEL'] ?? 'info') === 'info' ? 'selected' : ''; ?>>Info</option>
+                    <option value="debug" <?php echo ($cfg['LOG_LEVEL'] ?? 'info') === 'debug' ? 'selected' : ''; ?>>Debug</option>
+                    <option value="trace" <?php echo ($cfg['LOG_LEVEL'] ?? 'info') === 'trace' ? 'selected' : ''; ?>>Trace</option>
+                </select>
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn">Apply Configuration</button>
+            </div>
+        </form>
+    </div>
+
+    <!-- Certificate Management Section -->
+    <div class="wezterm-section">
+        <h3>Certificate Management</h3>
+
+        <?php if (!isset($status['ca_initialized']) || !$status['ca_initialized']): ?>
+        <div class="alert alert-warning">
+            <strong>Certificate Authority Not Initialized</strong><br>
+            You must initialize the Certificate Authority before generating client certificates.
+        </div>
+
+        <div class="button-group">
+            <button type="button" class="btn" onclick="initializeCA()">Initialize Certificate Authority</button>
+        </div>
+
+        <?php else: ?>
+
+        <div class="alert alert-info">
+            <strong>Certificate Authority Active</strong><br>
+            Generate client certificates for each device that will connect to this WezTerm server.
+        </div>
+
+        <!-- Certificate List -->
+        <?php if (count($certs) > 0): ?>
+        <table class="cert-table">
+            <thead>
+                <tr>
+                    <th>Certificate Name</th>
+                    <th>Created Date</th>
+                    <th>Expires</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="cert-list">
+                <?php foreach ($certs as $cert): ?>
+                <tr>
+                    <td><?php echo htmlspecialchars($cert['name']); ?></td>
+                    <td><?php echo htmlspecialchars($cert['created']); ?></td>
+                    <td><?php echo htmlspecialchars($cert['expires']); ?></td>
+                    <td><?php echo $cert['revoked'] ? '<span style="color: red;">Revoked</span>' : '<span style="color: green;">Valid</span>'; ?></td>
+                    <td>
+                        <div class="cert-actions">
+                            <?php if (!$cert['revoked']): ?>
+                            <button type="button" class="btn btn-small" onclick="downloadCertBundle('<?php echo htmlspecialchars($cert['name']); ?>')">Download Bundle</button>
+                            <button type="button" class="btn btn-small" onclick="revokeCert('<?php echo htmlspecialchars($cert['name']); ?>')">Revoke</button>
+                            <?php endif; ?>
+                        </div>
+                    </td>
+                </tr>
+                <?php endforeach; ?>
+            </tbody>
+        </table>
+        <?php else: ?>
+        <p>No client certificates have been generated yet.</p>
+        <?php endif; ?>
+
+        <!-- Generate New Certificate Form -->
+        <div class="generate-cert-form">
+            <div class="form-group">
+                <label for="new-cert-name">Certificate Name</label>
+                <input type="text" id="new-cert-name" placeholder="e.g., laptop, desktop, work-pc" pattern="[a-zA-Z0-9_-]+" title="Alphanumeric characters, hyphens, and underscores only">
+                <small>Use a descriptive name (letters, numbers, hyphens, underscores only)</small>
+            </div>
+            <button type="button" class="btn" onclick="generateCert()">Generate Certificate</button>
+        </div>
+
+        <?php endif; ?>
+    </div>
+</div>
+
+<script>
+// Refresh status on page load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshStatus();
+});
+
+// Service control functions
+function serviceControl(action) {
+    const button = document.getElementById('btn-' + action);
+    const originalText = button.textContent;
+    button.disabled = true;
+    button.innerHTML = originalText + '<span class="spinner"></span>';
+
+    fetch('/plugins/wezterm/include/exec.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'action=' + action
+    })
+    .then(response => response.json())
+    .then(data => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+
+        if (data.success) {
+            swal({
+                title: 'Success',
+                text: data.message || action.charAt(0).toUpperCase() + action.slice(1) + ' completed successfully',
+                type: 'success',
+                timer: 2000
+            });
+            setTimeout(refreshStatus, 1000);
+        } else {
+            swal({
+                title: 'Error',
+                text: data.message || 'Failed to ' + action + ' service',
+                type: 'error'
+            });
+        }
+    })
+    .catch(error => {
+        button.disabled = false;
+        button.innerHTML = originalText;
+        swal({
+            title: 'Error',
+            text: 'Request failed: ' + error.message,
+            type: 'error'
+        });
+    });
+}
+
+// Refresh status display
+function refreshStatus() {
+    fetch('/plugins/wezterm/include/exec.php?action=status')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const status = data.status;
+
+            // Update status badge
+            const badge = document.getElementById('status-badge');
+            badge.textContent = status.running ? 'Running' : 'Stopped';
+            badge.className = 'status-badge ' + (status.running ? 'status-running' : 'status-stopped');
+
+            // Update version
+            document.getElementById('wezterm-version').textContent = status.version || 'Not installed';
+
+            // Update cert count
+            if (status.cert_count !== undefined) {
+                document.getElementById('cert-count').textContent = status.cert_count + ' issued';
+            }
+        }
+    })
+    .catch(error => {
+        console.error('Failed to refresh status:', error);
+    });
+}
+
+// Save configuration
+function saveConfig(event) {
+    event.preventDefault();
+
+    const formData = new FormData(event.target);
+    formData.append('action', 'save_config');
+
+    const params = new URLSearchParams();
+    for (const pair of formData.entries()) {
+        if (pair[0] === 'autostart') {
+            params.append('autostart', document.getElementById('cfg-autostart').checked ? 'enable' : 'disable');
+        } else {
+            params.append(pair[0], pair[1]);
+        }
+    }
+
+    fetch('/plugins/wezterm/include/exec.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: params.toString()
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            swal({
+                title: 'Success',
+                text: 'Configuration saved successfully. You may need to restart the service for changes to take effect.',
+                type: 'success',
+                confirmButtonText: 'Restart Now',
+                cancelButtonText: 'Later',
+                showCancelButton: true
+            }, function(restart) {
+                if (restart) {
+                    serviceControl('restart');
+                } else {
+                    refreshStatus();
+                }
+            });
+        } else {
+            swal({
+                title: 'Error',
+                text: data.message || 'Failed to save configuration',
+                type: 'error'
+            });
+        }
+    })
+    .catch(error => {
+        swal({
+            title: 'Error',
+            text: 'Request failed: ' + error.message,
+            type: 'error'
+        });
+    });
+
+    return false;
+}
+
+// Initialize CA
+function initializeCA() {
+    swal({
+        title: 'Initialize Certificate Authority?',
+        text: 'This will create a new Certificate Authority for issuing client certificates. This only needs to be done once.',
+        type: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Initialize',
+        cancelButtonText: 'Cancel'
+    }, function(confirmed) {
+        if (confirmed) {
+            fetch('/plugins/wezterm/include/exec.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=init_ca'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    swal({
+                        title: 'Success',
+                        text: 'Certificate Authority initialized successfully!',
+                        type: 'success'
+                    }, function() {
+                        location.reload();
+                    });
+                } else {
+                    swal({
+                        title: 'Error',
+                        text: data.message || 'Failed to initialize CA',
+                        type: 'error'
+                    });
+                }
+            })
+            .catch(error => {
+                swal({
+                    title: 'Error',
+                    text: 'Request failed: ' + error.message,
+                    type: 'error'
+                });
+            });
+        }
+    });
+}
+
+// Generate client certificate
+function generateCert() {
+    const certName = document.getElementById('new-cert-name').value.trim();
+
+    if (!certName) {
+        swal({
+            title: 'Error',
+            text: 'Please enter a certificate name',
+            type: 'error'
+        });
+        return;
+    }
+
+    if (!/^[a-zA-Z0-9_-]+$/.test(certName)) {
+        swal({
+            title: 'Error',
+            text: 'Certificate name can only contain letters, numbers, hyphens, and underscores',
+            type: 'error'
+        });
+        return;
+    }
+
+    fetch('/plugins/wezterm/include/exec.php', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'action=generate_cert&name=' + encodeURIComponent(certName)
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            swal({
+                title: 'Success',
+                text: 'Certificate generated successfully! Click OK to download the certificate bundle.',
+                type: 'success'
+            }, function() {
+                downloadCertBundle(certName);
+                location.reload();
+            });
+            document.getElementById('new-cert-name').value = '';
+        } else {
+            swal({
+                title: 'Error',
+                text: data.message || 'Failed to generate certificate',
+                type: 'error'
+            });
+        }
+    })
+    .catch(error => {
+        swal({
+            title: 'Error',
+            text: 'Request failed: ' + error.message,
+            type: 'error'
+        });
+    });
+}
+
+// Download certificate bundle
+function downloadCertBundle(certName) {
+    window.location.href = '/plugins/wezterm/include/exec.php?action=download_cert&name=' + encodeURIComponent(certName);
+}
+
+// Revoke certificate
+function revokeCert(certName) {
+    swal({
+        title: 'Revoke Certificate?',
+        text: 'Are you sure you want to revoke the certificate "' + certName + '"? This action cannot be undone.',
+        type: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Revoke',
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#d9534f'
+    }, function(confirmed) {
+        if (confirmed) {
+            fetch('/plugins/wezterm/include/exec.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: 'action=revoke_cert&name=' + encodeURIComponent(certName)
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    swal({
+                        title: 'Success',
+                        text: 'Certificate revoked successfully',
+                        type: 'success'
+                    }, function() {
+                        location.reload();
+                    });
+                } else {
+                    swal({
+                        title: 'Error',
+                        text: data.message || 'Failed to revoke certificate',
+                        type: 'error'
+                    });
+                }
+            })
+            .catch(error => {
+                swal({
+                    title: 'Error',
+                    text: 'Request failed: ' + error.message,
+                    type: 'error'
+                });
+            });
+        }
+    });
+}
+</script>
